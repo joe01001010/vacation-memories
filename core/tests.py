@@ -1,5 +1,6 @@
 from importlib import reload
 
+from django.conf import settings
 from django.core.handlers.asgi import ASGIHandler
 from django.core.handlers.wsgi import WSGIHandler
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -53,3 +54,24 @@ class ProjectConfigurationTests(SimpleTestCase):
         module = reload(config.urls)
 
         self.assertEqual(len(module.urlpatterns), 3)
+
+    def test_static_url_uses_root_path(self) -> None:
+        self.assertEqual(settings.STATIC_URL, "/static/")
+
+    def test_whitenoise_middleware_is_enabled(self) -> None:
+        self.assertIn("whitenoise.middleware.WhiteNoiseMiddleware", settings.MIDDLEWARE)
+
+    def test_staticfiles_storage_uses_whitenoise(self) -> None:
+        staticfiles_backend = settings.STORAGES["staticfiles"]["BACKEND"]
+
+        self.assertEqual(
+            staticfiles_backend,
+            "whitenoise.storage.CompressedStaticFilesStorage",
+        )
+
+    def test_static_css_is_served(self) -> None:
+        response = self.client.get("/static/css/site.css")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], 'text/css; charset="utf-8"')
+        self.assertContains(response, "color-scheme: dark")

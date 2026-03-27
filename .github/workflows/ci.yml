@@ -25,6 +25,9 @@ jobs:
       - name: Run migrations
         run: python manage.py migrate
 
+      - name: Collect static files
+        run: python manage.py collectstatic --noinput
+
       - name: Run tests with coverage
         run: |
           coverage run --rcfile=.coveragerc manage.py test
