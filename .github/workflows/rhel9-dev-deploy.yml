@@ -22,23 +22,20 @@ env:
   PYTHONUNBUFFERED: "1"
 
 jobs:
-  promote-to-dev:
-    name: Promote successful CI run to dev
+  approve-rhel9-dev:
+    name: Approve successful CI run for rhel9-dev
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success') }}
     runs-on: ubuntu-latest
     environment:
-      name: dev
+      name: rhel9-dev
     steps:
-      - name: Confirm gated promotion
-        run: echo "The localhost-style CI workflow passed, so the deployment workflow can continue."
+      - name: Confirm gated deployment approval
+        run: echo "The localhost-style CI workflow passed, and this workflow is now waiting on the rhel9-dev environment approval gate."
 
   test:
     name: Test on rhel9-dev with Python ${{ matrix.python.label }}
-    needs: promote-to-dev
+    needs: approve-rhel9-dev
     runs-on:
-      - self-hosted
-      - linux
-      - x64
       - rhel9-dev
     strategy:
       fail-fast: false
@@ -90,9 +87,6 @@ jobs:
     name: Smoke test Gunicorn on rhel9-dev with Python 3.12
     needs: test
     runs-on:
-      - self-hosted
-      - linux
-      - x64
       - rhel9-dev
     environment:
       name: rhel9-dev
