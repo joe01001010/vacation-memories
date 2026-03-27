@@ -42,6 +42,27 @@ If you prefer not to use the config file, this equivalent command also works:
 
 `gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3`
 
+## Self-hosted RHEL9 runner
+
+The repository now includes a dedicated workflow for a self-hosted runner labeled `rhel9-dev`:
+
+`.github/workflows/rhel9-dev-deploy.yml`
+
+That workflow does two things on every push:
+
+1. Runs migrations, collects static files, and executes the full Django test suite with coverage on the `rhel9-dev` runner.
+2. Repeats the checks on the same runner, starts Gunicorn, and smoke-tests both the home page and the static CSS endpoint.
+
+Both the standard CI workflow and the `rhel9-dev` deployment-validation workflow now run against Python `3.12`, `3.13`, and `3.14`.
+
+The workflow assumes:
+
+1. Your self-hosted runner has the label `rhel9-dev`.
+2. You created a GitHub Environment named `rhel9-dev`.
+3. The runner can execute `bash`, `curl`, and Python virtual environments.
+
+This is a deployment validation workflow, not a permanent process manager. If you want the app to stay running on RHEL9 after the workflow finishes, the next step is to run Gunicorn under `systemd`, `supervisord`, or a container service.
+
 ## Run tests with coverage
 
 `coverage run --rcfile=.coveragerc manage.py test`
