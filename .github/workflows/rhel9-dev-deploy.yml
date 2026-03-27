@@ -2,9 +2,6 @@ name: RHEL9 Dev Deploy Validation
 
 on:
   push:
-    branches:
-      - main
-      - develop
   workflow_dispatch:
 
 concurrency:
