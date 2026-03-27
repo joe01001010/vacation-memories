@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 chdir = str(Path(__file__).resolve().parent)
-bind = os.getenv("GUNICORN_BIND", "0.0.0.0:8000")
+bind = os.getenv("GUNICORN_BIND", "127.0.0.1:8000")
 workers = int(os.getenv("GUNICORN_WORKERS", "3"))
 timeout = int(os.getenv("GUNICORN_TIMEOUT", "30"))
 accesslog = "-"
