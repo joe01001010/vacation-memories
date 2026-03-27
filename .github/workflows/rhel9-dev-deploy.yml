@@ -1,11 +1,15 @@
 name: RHEL9 Dev Deploy Validation
 
 on:
-  push:
+  workflow_run:
+    workflows:
+      - Django CI for running tests with coverage
+    types:
+      - completed
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -18,8 +22,19 @@ env:
   PYTHONUNBUFFERED: "1"
 
 jobs:
+  promote-to-dev:
+    name: Promote successful CI run to dev
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success') }}
+    runs-on: ubuntu-latest
+    environment:
+      name: dev
+    steps:
+      - name: Confirm gated promotion
+        run: echo "The localhost-style CI workflow passed, so the deployment workflow can continue."
+
   test:
     name: Test on rhel9-dev with Python ${{ matrix.python.label }}
+    needs: promote-to-dev
     runs-on:
       - self-hosted
       - linux
@@ -42,6 +57,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           clean: true
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Show Python version
         run: |
@@ -87,6 +103,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           clean: true
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Create isolated virtual environment
         run: |
