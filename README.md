@@ -48,12 +48,18 @@ The repository now includes a dedicated workflow for a self-hosted runner labele
 
 `.github/workflows/rhel9-dev-deploy.yml`
 
-That workflow does two things on every push:
+That workflow is now chained behind the standard CI workflow:
+
+1. The localhost-style CI workflow in `.github/workflows/ci.yml` runs first on GitHub-hosted runners.
+2. Only if that CI workflow succeeds for a `push`, the deployment workflow promotes the run into the `dev` environment.
+3. After that promotion, the self-hosted `rhel9-dev` workflow runs its RHEL9 validation and Gunicorn smoke test.
+
+Inside the RHEL9 deployment workflow, it then does two things:
 
 1. Runs migrations, collects static files, and executes the full Django test suite with coverage on the `rhel9-dev` runner.
 2. Repeats the checks on the same runner, starts Gunicorn, and smoke-tests both the home page and the static CSS endpoint.
 
-Both the standard CI workflow and the `rhel9-dev` deployment-validation workflow now run against Python `3.12`, `3.13`, and `3.14`.
+The workflows are currently configured for Python `3.12` and `3.13`.
 
 The workflow assumes:
 
