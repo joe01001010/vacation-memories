@@ -1,0 +1,145 @@
+name: RHEL9 Dev Deploy Validation
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DJANGO_DEBUG: "False"
+  DJANGO_ALLOWED_HOSTS: "127.0.0.1,localhost"
+  GUNICORN_BIND: "127.0.0.1:18000"
+  GUNICORN_URL: "http://127.0.0.1:18000"
+  GUNICORN_WORKERS: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  test:
+    name: Test on rhel9-dev with Python ${{ matrix.python.label }}
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - rhel9-dev
+    strategy:
+      fail-fast: false
+      matrix:
+        python:
+          - label: "3.12"
+            bin: "/usr/local/bin/python3.12"
+          - label: "3.13"
+            bin: "/usr/local/bin/python3.13"
+    environment:
+      name: rhel9-dev
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Show Python version
+        run: |
+          "${{ matrix.python.bin }}" --version
+
+      - name: Create isolated virtual environment
+        run: |
+          rm -rf .github-venv
+          "${{ matrix.python.bin }}" -m venv .github-venv
+          echo "$GITHUB_WORKSPACE/.github-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip wheel
+          pip install -r requirements.txt
+
+      - name: Prepare Django
+        run: |
+          python manage.py migrate --noinput
+          python manage.py collectstatic --noinput
+
+      - name: Run checks and tests with coverage
+        run: |
+          python manage.py check --deploy
+          coverage run --rcfile=.coveragerc manage.py test
+          coverage report --fail-under=90
+          coverage xml
+
+  smoke-gunicorn:
+    name: Smoke test Gunicorn on rhel9-dev with Python 3.12
+    needs: test
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - rhel9-dev
+    environment:
+      name: rhel9-dev
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Create isolated virtual environment
+        run: |
+          rm -rf .github-venv
+          /usr/local/bin/python3.12 -m venv .github-venv
+          echo "$GITHUB_WORKSPACE/.github-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip wheel
+          pip install -r requirements.txt
+
+      - name: Prepare Django
+        run: |
+          python manage.py migrate --noinput
+          python manage.py collectstatic --noinput
+
+      - name: Start Gunicorn and smoke test the site
+        run: |
+          set -Eeuo pipefail
+
+          gunicorn -c gunicorn.conf.py config.wsgi:application \
+            > gunicorn.stdout.log \
+            2> gunicorn.stderr.log &
+          GUNICORN_PID=$!
+
+          cleanup() {
+            if kill -0 "$GUNICORN_PID" 2>/dev/null; then
+              kill "$GUNICORN_PID"
+              wait "$GUNICORN_PID" || true
+            fi
+          }
+          trap cleanup EXIT
+
+          for attempt in {1..30}; do
+            if curl --silent --show-error --fail "$GUNICORN_URL/" > /tmp/home.html; then
+              break
+            fi
+
+            if ! kill -0 "$GUNICORN_PID" 2>/dev/null; then
+              echo "Gunicorn exited before the site became reachable."
+              echo "--- stdout ---"
+              cat gunicorn.stdout.log || true
+              echo "--- stderr ---"
+              cat gunicorn.stderr.log || true
+              exit 1
+            fi
+
+            sleep 1
+          done
+
+          curl --silent --show-error --fail "$GUNICORN_URL/" | grep -q "Vacation Memories"
+          curl --silent --show-error --fail "$GUNICORN_URL/static/css/site.css" | grep -q "color-scheme: dark"
